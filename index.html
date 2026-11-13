@@ -1,0 +1,343 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Warehouse App</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f3f6fa;color:#243447;font-family:Arial,sans-serif}
+header{background:#18334c;color:white;padding:18px}
+header h2{margin:0;font-size:20px}
+header p{margin:6px 0 0;color:#cbd8e4;font-size:12px}
+main{max-width:950px;margin:auto;padding:16px}
+.card{background:white;border:1px solid #e4eaf0;border-radius:12px;padding:16px;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:white;border:1px solid #e4eaf0;border-radius:12px;padding:15px}
+.stat small{color:#64748b}
+.stat strong{display:block;font-size:25px;margin-top:7px}
+input,select,button{width:100%;padding:12px;border-radius:8px;font-size:14px}
+input,select{border:1px solid #cbd5e1;background:white;margin:6px 0 12px}
+button{border:0;background:#176b52;color:white;font-weight:bold;cursor:pointer;margin:4px 0}
+button.secondary{background:#e8eef4;color:#243447}
+button.danger{background:#a83232}
+button:disabled{opacity:.5}
+label{font-size:13px;font-weight:bold}
+h3{font-size:16px;margin:0 0 14px}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:14px 0}
+.tabs button{font-size:12px;padding:11px 4px}
+.tabs button.active{background:#18334c;color:white}
+.section{display:none}
+.section.active{display:block}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:450px}
+th,td{text-align:left;padding:11px 9px;border-bottom:1px solid #e7edf2}
+th{background:#f6f8fa}
+.muted{color:#64748b;font-size:12px}
+.msg{padding:11px;border-radius:8px;margin:10px 0;font-size:13px;display:none}
+.msg.error{display:block;background:#feecec;color:#9b2525}
+.msg.success{display:block;background:#e5f6ec;color:#176b52}
+#app{display:none}
+#auth{max-width:420px;margin:35px auto}
+footer{text-align:center;padding:20px;color:#718096;font-size:11px}
+@media(min-width:650px){.stats{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+
+<header>
+  <h2>📦 Warehouse App</h2>
+  <p>Sistem pencatatan stok barang</p>
+</header>
+
+<main>
+  <div id="auth" class="card">
+    <h3>Masuk ke Warehouse</h3>
+    <div id="authMsg" class="msg"></div>
+    <label>Email</label>
+    <input id="email" type="email" placeholder="Email akun">
+    <label>Password</label>
+    <input id="password" type="password" placeholder="Password">
+    <button onclick="login()">Masuk</button>
+    <button class="secondary" onclick="signup()">Daftar akun baru</button>
+    <p class="muted">Semua pengguna memiliki hak akses yang sama.</p>
+  </div>
+
+  <div id="app">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0">
+      <span class="muted" id="userEmail"></span>
+      <button class="secondary" style="width:auto;padding:9px 14px" onclick="logout()">Keluar</button>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><small>Jenis barang</small><strong id="totalBarang">0</strong></div>
+      <div class="stat"><small>Total stok</small><strong id="totalStok">0</strong></div>
+      <div class="stat"><small>Barang masuk hari ini</small><strong id="masukHari">0</strong></div>
+      <div class="stat"><small>Barang keluar hari ini</small><strong id="keluarHari">0</strong></div>
+    </div>
+
+    <div class="tabs">
+      <button class="active" onclick="showTab('stok',this)">Data Barang</button>
+      <button onclick="showTab('transaksi',this)">Transaksi</button>
+      <button onclick="showTab('riwayat',this)">Riwayat</button>
+    </div>
+
+    <div id="msg" class="msg"></div>
+
+    <section id="stok" class="section active">
+      <div class="card">
+        <h3>Tambah Barang</h3>
+        <form id="barangForm">
+          <label>Kode barang</label>
+          <input id="kode" required placeholder="Contoh: CUP001">
+          <label>Nama barang</label>
+          <input id="nama" required placeholder="Nama barang">
+          <label>Satuan</label>
+          <input id="satuan" required placeholder="PCS, BOX, KG, LITER">
+          <label>Stok awal</label>
+          <input id="stokAwal" type="number" min="0" step="0.001" value="0" required>
+          <button type="submit">Simpan Barang</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Daftar Stok Barang</h3>
+        <input id="cari" placeholder="Cari kode atau nama barang..." oninput="renderBarang()">
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Kode</th><th>Nama</th><th>Stok</th><th>Satuan</th></tr></thead>
+            <tbody id="barangRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="transaksi" class="section">
+      <div class="card">
+        <h3>Catat Transaksi</h3>
+        <form id="transaksiForm">
+          <label>Jenis transaksi</label>
+          <select id="jenis">
+            <option value="masuk">Barang Masuk</option>
+            <option value="keluar">Barang Keluar</option>
+          </select>
+          <label>Pilih barang</label>
+          <select id="barangId" required></select>
+          <label>Jumlah</label>
+          <input id="jumlah" type="number" min="0.001" step="0.001" required placeholder="Jumlah barang">
+          <label>Tanggal</label>
+          <input id="tanggal" type="date" required>
+          <label>Keterangan</label>
+          <input id="keterangan" placeholder="Opsional">
+          <button type="submit">Simpan Transaksi</button>
+        </form>
+        <p class="muted">Stok akan diperbarui otomatis setelah transaksi berhasil.</p>
+      </div>
+    </section>
+
+    <section id="riwayat" class="section">
+      <div class="card">
+        <h3>Riwayat Transaksi</h3>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Tanggal</th><th>Barang</th><th>Jenis</th><th>Jumlah</th><th>Keterangan</th></tr></thead>
+            <tbody id="riwayatRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer>Warehouse App · Pencatatan Persediaan Barang</footer>
+
+<script>
+const SUPABASE_URL = "https://hwcxqwumhhixpjnbcmen.supabase.co/rest/v1/";
+const SUPABASE_KEY = "sb_publishable_eOGki4ex4TvYXBLWhZZ_GA_ejwrhCYP";
+
+const db = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
+
+let barangData = [];
+let transaksiData = [];
+
+function el(id){return document.getElementById(id)}
+
+function pesan(id,teks,jenis="success"){
+  const box=el(id);
+  box.textContent=teks;
+  box.className="msg "+jenis;
+}
+
+function format(n){
+  return Number(n).toLocaleString("id-ID",{maximumFractionDigits:3});
+}
+
+function escapeHTML(value){
+  return String(value??"").replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  })[c]);
+}
+
+async function login(){
+  const {error}=await db.auth.signInWithPassword({
+    email:el("email").value.trim(),
+    password:el("password").value
+  });
+  if(error)pesan("authMsg",error.message,"error");
+}
+
+async function signup(){
+  const {data,error}=await db.auth.signUp({
+    email:el("email").value.trim(),
+    password:el("password").value
+  });
+  if(error)return pesan("authMsg",error.message,"error");
+  pesan("authMsg",
+    data.session?"Pendaftaran berhasil.":"Periksa email untuk konfirmasi akun.",
+    "success"
+  );
+}
+
+async function logout(){
+  await db.auth.signOut();
+}
+
+function showTab(id,button){
+  document.querySelectorAll(".section").forEach(x=>x.classList.remove("active"));
+  document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("active"));
+  el(id).classList.add("active");
+  button.classList.add("active");
+}
+
+async function loadData(){
+  const {data:b,error:eb}=await db.from("barang")
+    .select("*").order("nama_barang");
+  if(eb)return pesan("msg",eb.message,"error");
+
+  const {data:t,error:et}=await db.from("transaksi")
+    .select("*").order("created_at",{ascending:false}).limit(500);
+  if(et)return pesan("msg",et.message,"error");
+
+  barangData=b||[];
+  transaksiData=t||[];
+  renderBarang();
+  renderSelect();
+  renderRiwayat();
+  renderStats();
+}
+
+function renderBarang(){
+  const q=el("cari").value.toLowerCase();
+  const rows=barangData.filter(b=>
+    (b.kode_barang+" "+b.nama_barang).toLowerCase().includes(q)
+  );
+  el("barangRows").innerHTML=rows.map(b=>`
+    <tr>
+      <td>${escapeHTML(b.kode_barang)}</td>
+      <td>${escapeHTML(b.nama_barang)}</td>
+      <td><b>${format(b.stok_saat_ini)}</b></td>
+      <td>${escapeHTML(b.satuan)}</td>
+    </tr>`).join("")||'<tr><td colspan="4">Belum ada barang</td></tr>';
+}
+
+function renderSelect(){
+  el("barangId").innerHTML=barangData.map(b=>`
+    <option value="${b.id}">
+      ${escapeHTML(b.kode_barang)} - ${escapeHTML(b.nama_barang)}
+      (Stok: ${format(b.stok_saat_ini)} ${escapeHTML(b.satuan)})
+    </option>`).join("");
+}
+
+function renderRiwayat(){
+  el("riwayatRows").innerHTML=transaksiData.map(t=>{
+    const b=barangData.find(x=>x.id===t.barang_id);
+    return `<tr>
+      <td>${escapeHTML(t.tanggal)}</td>
+      <td>${escapeHTML(b?.nama_barang||"Barang tidak ditemukan")}</td>
+      <td>${t.jenis==="masuk"?"Masuk":"Keluar"}</td>
+      <td>${format(t.jumlah)}</td>
+      <td>${escapeHTML(t.keterangan||"-")}</td>
+    </tr>`;
+  }).join("")||'<tr><td colspan="5">Belum ada transaksi</td></tr>';
+}
+
+function renderStats(){
+  el("totalBarang").textContent=barangData.length;
+  el("totalStok").textContent=format(
+    barangData.reduce((sum,b)=>sum+Number(b.stok_saat_ini),0)
+  );
+  const today=new Date().toLocaleDateString("en-CA");
+  const todayTx=transaksiData.filter(t=>t.tanggal===today);
+  el("masukHari").textContent=format(
+    todayTx.filter(t=>t.jenis==="masuk").reduce((s,t)=>s+Number(t.jumlah),0)
+  );
+  el("keluarHari").textContent=format(
+    todayTx.filter(t=>t.jenis==="keluar").reduce((s,t)=>s+Number(t.jumlah),0)
+  );
+}
+
+el("barangForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const button=e.submitter;
+  button.disabled=true;
+  const payload={
+    kode_barang:el("kode").value.trim(),
+    nama_barang:el("nama").value.trim(),
+    satuan:el("satuan").value.trim(),
+    stok_awal:Number(el("stokAwal").value)
+  };
+  const {error}=await db.from("barang").insert(payload);
+  button.disabled=false;
+  if(error)return pesan("msg",error.message,"error");
+  e.target.reset();
+  el("stokAwal").value=0;
+  pesan("msg","Barang berhasil ditambahkan.");
+  await loadData();
+});
+
+el("transaksiForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const button=e.submitter;
+  button.disabled=true;
+  const payload={
+    barang_id:Number(el("barangId").value),
+    jenis:el("jenis").value,
+    jumlah:Number(el("jumlah").value),
+    tanggal:el("tanggal").value,
+    keterangan:el("keterangan").value.trim()
+  };
+  const {error}=await db.from("transaksi").insert(payload);
+  button.disabled=false;
+  if(error)return pesan("msg",error.message,"error");
+  e.target.reset();
+  el("tanggal").value=new Date().toLocaleDateString("en-CA");
+  pesan("msg","Transaksi berhasil disimpan. Stok sudah diperbarui.");
+  await loadData();
+});
+
+async function startApp(session){
+  if(session){
+    el("auth").style.display="none";
+    el("app").style.display="block";
+    el("userEmail").textContent=session.user.email;
+    el("tanggal").value=new Date().toLocaleDateString("en-CA");
+    await loadData();
+  }else{
+    el("auth").style.display="block";
+    el("app").style.display="none";
+  }
+}
+
+db.auth.onAuthStateChange((event,session)=>{
+  setTimeout(()=>startApp(session),0);
+});
+
+db.auth.getSession().then(({data})=>startApp(data.session));
+</script>
+</body>
+</html>
